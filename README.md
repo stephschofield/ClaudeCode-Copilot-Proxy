@@ -7,13 +7,13 @@
 
 > ⚠️ **Disclaimer**: This project is for **educational purposes only**. It is intended to demonstrate API proxy patterns and OAuth device flow authentication. Use at your own risk and ensure compliance with GitHub Copilot's Terms of Service.
 
-A proxy server that enables **Claude Code** and **Cursor IDE** to use GitHub Copilot's AI models instead of direct API access. Use your GitHub Copilot subscription to access Claude models (Opus 4.5, Sonnet 4, etc.) in Claude Code, or GPT models in Cursor IDE.
+A proxy server that enables **Claude Code** and **Cursor IDE** to use GitHub Copilot's AI models instead of direct API access. Use your GitHub Copilot subscription to access Claude models (Opus 4.5, Sonnet 4.5, Haiku 4.5) in Claude Code, or GPT models in Cursor IDE.
 
 ## 🚀 Features
 
 - **Anthropic API Compatibility**: Implements the Anthropic Messages API for Claude Code
 - **OpenAI API Compatibility**: Implements the OpenAI API format for Cursor IDE
-- **Claude Model Support**: Access Claude Opus 4.5, Sonnet 4, and other models via Copilot
+- **Claude Model Support**: Access Claude Opus 4.5, Sonnet 4.5, and Haiku 4.5 via Copilot
 - **GitHub Copilot Integration**: Connects to GitHub Copilot's backend services
 - **Seamless Authentication**: Handles GitHub OAuth device flow authentication
 - **Token Management**: Automatically refreshes Copilot tokens
@@ -68,9 +68,8 @@ A proxy server that enables **Claude Code** and **Cursor IDE** to use GitHub Cop
 | Model | Copilot Model |
 |-------|---------------|
 | `claude-opus-4-5-20250514` | Claude Opus 4.5 |
-| `claude-sonnet-4-20250514` | Claude Sonnet 4 |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
-| `claude-3-5-haiku-20241022` | Claude 3.5 Haiku |
+| `claude-sonnet-4-5-20250514` | Claude Sonnet 4.5 |
+| `claude-haiku-4-5-20250514` | Claude Haiku 4.5 |
 
 ## 🔌 Configuration with Cursor IDE
 
@@ -99,9 +98,9 @@ To switch back to Cursor's API:
 ┌─────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
 │   Claude Code   │────▶│   Copilot Proxy Server   │────▶│  GitHub Copilot API │
 │  (Anthropic API │     │                          │     │  (Anthropic Models) │
-│     format)     │     │  - Auth (OAuth device)   │     │  - claude-opus-4.5  │
-└─────────────────┘     │  - Request translation   │     │  - claude-sonnet-4  │
-                        │  - Response translation  │     │  - etc.             │
+│     format)     │     │  - Auth (OAuth device)   │     │  - claude-opus-4.5   │
+└─────────────────┘     │  - Request translation   │     │  - claude-sonnet-4.5 │
+                        │  - Response translation  │     │  - claude-haiku-4.5  │
                         │  - Streaming support     │     └─────────────────────┘
                         └──────────────────────────┘
 ```
