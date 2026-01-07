@@ -149,48 +149,61 @@ export async function makeAnthropicCompletionRequest(
 ): Promise<AnthropicMessageResponse> {
   const { messages, system, temperature, max_tokens, model } = request;
   
-  // Map the model name
+  // Map the model name to Copilot's model name
   const copilotModel = mapClaudeModelToCopilot(model);
-  
-  // Convert messages to prompt (used for non-Anthropic Copilot endpoints)
-  void convertAnthropicMessagesToCopilotPrompt(messages, system);
   
   // Get machine ID
   const machineId = getMachineId();
   
-  // Prepare request to Copilot's Anthropic endpoint
-  const anthropicEndpoint = config.github.copilot.anthropicEndpoints.COPILOT_ANTHROPIC_CHAT;
+  // Use Copilot's chat completions endpoint (OpenAI-compatible)
+  const chatEndpoint = config.github.copilot.anthropicEndpoints.COPILOT_ANTHROPIC_CHAT;
   
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${copilotToken}`,
     'X-Request-Id': uuidv4(),
     'Machine-Id': machineId,
-    'User-Agent': 'ClaudeCode/1.0.0',
-    'Editor-Version': 'VSCode/1.90.0',
-    'Editor-Plugin-Version': 'copilot-claude/1.0.0',
-    'Copilot-Integration-Id': 'claude-code-proxy',
+    'User-Agent': 'GitHubCopilotChat/0.12.0',
+    'Editor-Version': 'vscode/1.90.0',
+    'Editor-Plugin-Version': 'copilot-chat/0.12.0',
+    'Openai-Organization': 'github-copilot',
+    'Openai-Intent': 'conversation-agent',
   };
   
-  // Build request body - try Anthropic format first
+  // Build OpenAI-compatible request body
+  // Prepend system message if provided
+  const openaiMessages: Array<{ role: string; content: string }> = [];
+  
+  if (system) {
+    openaiMessages.push({
+      role: 'system',
+      content: system,
+    });
+  }
+  
+  // Convert Anthropic messages to OpenAI format
+  for (const msg of messages) {
+    openaiMessages.push({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: typeof msg.content === 'string' ? msg.content : extractTextContent(msg.content),
+    });
+  }
+  
   const body = {
     model: copilotModel,
-    messages: messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : extractTextContent(m.content),
-    })),
+    messages: openaiMessages,
     max_tokens: max_tokens || 4096,
-    temperature: temperature ?? 1,
-    ...(system && { system }),
+    temperature: temperature ?? 0.7,
+    stream: false,
   };
   
   try {
-    logger.debug('Making Anthropic completion request to Copilot', { 
-      endpoint: anthropicEndpoint,
+    logger.debug('Making chat completion request to Copilot', { 
+      endpoint: chatEndpoint,
       model: copilotModel,
     });
     
-    const response = await fetch(anthropicEndpoint, {
+    const response = await fetch(chatEndpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -198,7 +211,7 @@ export async function makeAnthropicCompletionRequest(
     
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('Copilot Anthropic API error', { 
+      logger.error('Copilot chat API error', { 
         status: response.status, 
         statusText: response.statusText,
         body: errorText,
@@ -208,20 +221,40 @@ export async function makeAnthropicCompletionRequest(
     
     const data = await response.json() as Record<string, unknown>;
     
-    // If response is already in Anthropic format, return it
-    if (data.type === 'message' && data.content) {
-      return data as unknown as AnthropicMessageResponse;
-    }
-    
-    // Otherwise, convert from Copilot format
-    return convertCopilotToAnthropicResponse(
-      data as unknown as CopilotCompletionResponse,
-      model
-    );
+    // Convert OpenAI chat response to Anthropic format
+    return convertOpenAIToAnthropicResponse(data, model);
   } catch (error) {
-    logger.error('Error making Anthropic completion request', { error });
+    logger.error('Error making chat completion request', { error });
     throw error;
   }
+}
+
+/**
+ * Convert OpenAI chat completion response to Anthropic format
+ */
+function convertOpenAIToAnthropicResponse(
+  data: Record<string, unknown>,
+  model: string
+): AnthropicMessageResponse {
+  const choices = (data.choices as Array<{ message?: { content?: string }; finish_reason?: string }>) || [];
+  const firstChoice = choices[0] || {};
+  const message = firstChoice.message || {};
+  const content = (message.content as string) || '';
+  const usage = (data.usage as { prompt_tokens?: number; completion_tokens?: number }) || {};
+  
+  return {
+    id: `msg_${uuidv4().replace(/-/g, '').substring(0, 24)}`,
+    type: 'message',
+    role: 'assistant',
+    content: [{ type: 'text', text: content }],
+    model,
+    stop_reason: firstChoice.finish_reason === 'stop' ? 'end_turn' : (firstChoice.finish_reason as 'end_turn' | 'max_tokens' | 'stop_sequence' | 'tool_use' | null) || 'end_turn',
+    stop_sequence: null,
+    usage: {
+      input_tokens: usage.prompt_tokens || 0,
+      output_tokens: usage.completion_tokens || 0,
+    },
+  };
 }
 
 /**

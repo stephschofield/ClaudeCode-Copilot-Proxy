@@ -36,8 +36,8 @@ app.use('/auth', authRoutes);
 // Apply rate limiting to API endpoints
 // OpenAI-compatible routes (for Cursor IDE)
 app.use('/v1', rateLimiter(), openaiRoutes);
-// Anthropic-compatible routes (for Claude Code)
-app.use('/v1', rateLimiter(), anthropicRoutes);
+// Anthropic-compatible routes (for Claude Code) - mounted at /anthropic/v1
+app.use('/anthropic/v1', rateLimiter(), anthropicRoutes);
 app.use('/usage', usageRoutes);
 
 // Home page - redirect to auth page

@@ -25,9 +25,8 @@ export function mapClaudeModelToCopilot(claudeModel: string): string {
     }
   }
   
-  // Default fallback: use claude-sonnet-4 as default
-  // This is a reasonable default for most use cases
-  return 'claude-sonnet-4';
+  // Default fallback: use claude-opus-4.5 as default (user requested)
+  return 'claude-opus-4.5';
 }
 
 /**

@@ -69,6 +69,36 @@ anthropicRoutes.get('/models', requireAuth, (_req, res) => {
   res.json(models);
 });
 
+// POST /v1/messages/count_tokens - Token counting (stub)
+anthropicRoutes.post('/messages/count_tokens', requireAuth, async (req, res) => {
+  // Return approximate token count based on message content
+  const { messages, system } = req.body;
+  let totalChars = 0;
+  
+  if (system) {
+    totalChars += typeof system === 'string' ? system.length : JSON.stringify(system).length;
+  }
+  
+  if (messages && Array.isArray(messages)) {
+    for (const msg of messages) {
+      if (typeof msg.content === 'string') {
+        totalChars += msg.content.length;
+      } else if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === 'text' && block.text) {
+            totalChars += block.text.length;
+          }
+        }
+      }
+    }
+  }
+  
+  // Rough approximation: 1 token ≈ 4 characters
+  const inputTokens = Math.ceil(totalChars / 4);
+  
+  res.json({ input_tokens: inputTokens });
+});
+
 // POST /v1/messages - Create a message (main chat endpoint)
 anthropicRoutes.post('/messages', requireAuth, async (req, res, _next) => {
   const sessionId = res.locals.sessionId || uuidv4();

@@ -36,55 +36,48 @@ const API_ENDPOINTS = {
 
 // API endpoints for Anthropic-compatible Copilot API (Claude models)
 const ANTHROPIC_API_ENDPOINTS = {
-  // GitHub Copilot's Anthropic chat completions endpoint
-  COPILOT_ANTHROPIC_CHAT: 'https://api.individual.githubcopilot.com/anthropic/chat/completions',
+  // GitHub Copilot's chat completions endpoint (OpenAI-compatible, supports Claude models)
+  COPILOT_ANTHROPIC_CHAT: 'https://api.githubcopilot.com/chat/completions',
 };
 
 // Claude model mappings: Claude Code model names -> Copilot model names
 export const CLAUDE_MODEL_MAPPINGS: Record<string, string> = {
-  // Claude Opus 4.5 (latest flagship)
+  // Claude Opus 4.5 (default - latest flagship)
   'claude-opus-4-5-20250514': 'claude-opus-4.5',
   'claude-opus-4.5': 'claude-opus-4.5',
+  'opus': 'claude-opus-4.5',
   
-  // Claude Sonnet 4
-  'claude-sonnet-4-20250514': 'claude-sonnet-4',
-  'claude-sonnet-4': 'claude-sonnet-4',
+  // Claude Sonnet 4.5
+  'claude-sonnet-4-5-20250514': 'claude-sonnet-4.5',
+  'claude-sonnet-4.5': 'claude-sonnet-4.5',
+  'claude-sonnet-4-20250514': 'claude-sonnet-4.5',
+  'claude-sonnet-4': 'claude-sonnet-4.5',
+  'sonnet': 'claude-sonnet-4.5',
   
-  // Claude 3.5 Sonnet
-  'claude-3-5-sonnet-20241022': 'claude-3.5-sonnet',
-  'claude-3.5-sonnet': 'claude-3.5-sonnet',
-  
-  // Claude 3.5 Haiku
-  'claude-3-5-haiku-20241022': 'claude-3.5-haiku',
-  'claude-3.5-haiku': 'claude-3.5-haiku',
-  
-  // Legacy mappings
-  'claude-3-opus-20240229': 'claude-3-opus',
-  'claude-3-sonnet-20240229': 'claude-3-sonnet',
-  'claude-3-haiku-20240307': 'claude-3-haiku',
+  // Claude Haiku 4.5
+  'claude-haiku-4-5-20250514': 'claude-haiku-4.5',
+  'claude-haiku-4.5': 'claude-haiku-4.5',
+  'claude-3-5-haiku-20241022': 'claude-haiku-4.5',
+  'claude-3.5-haiku': 'claude-haiku-4.5',
+  'haiku': 'claude-haiku-4.5',
 };
 
-// Available Claude models via Copilot
+// Available Claude models via Copilot (Opus 4.5 is default)
 export const AVAILABLE_CLAUDE_MODELS = [
   {
     id: 'claude-opus-4-5-20250514',
-    display_name: 'Claude Opus 4.5',
+    display_name: 'Claude Opus 4.5 (Default)',
     copilot_model: 'claude-opus-4.5',
   },
   {
-    id: 'claude-sonnet-4-20250514',
-    display_name: 'Claude Sonnet 4',
-    copilot_model: 'claude-sonnet-4',
+    id: 'claude-sonnet-4-5-20250514',
+    display_name: 'Claude Sonnet 4.5',
+    copilot_model: 'claude-sonnet-4.5',
   },
   {
-    id: 'claude-3-5-sonnet-20241022',
-    display_name: 'Claude 3.5 Sonnet',
-    copilot_model: 'claude-3.5-sonnet',
-  },
-  {
-    id: 'claude-3-5-haiku-20241022',
-    display_name: 'Claude 3.5 Haiku',
-    copilot_model: 'claude-3.5-haiku',
+    id: 'claude-haiku-4-5-20250514',
+    display_name: 'Claude Haiku 4.5',
+    copilot_model: 'claude-haiku-4.5',
   },
 ];
 
