@@ -10,12 +10,29 @@ import { logger } from '../utils/logger.js';
 let githubToken: string | null = null;
 let copilotToken: CopilotToken | null = null;
 let pendingVerification: VerificationResponse | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let pendingAuth: any = null;
 
 /**
  * Initialize the OAuth device flow for GitHub authentication
  * @returns Promise<VerificationResponse> Device verification info
  */
 export async function initiateDeviceFlow(): Promise<VerificationResponse> {
+  // If already authenticated with valid token, return early
+  if (githubToken && copilotToken && isTokenValid()) {
+    return {
+      verification_uri: '',
+      user_code: '',
+      expires_in: 0,
+      interval: 0,
+      status: 'authenticated'
+    };
+  }
+
+  // Clear any existing auth instance
+  pendingAuth = null;
+  pendingVerification = null;
+
   return new Promise((resolve, reject) => {
     const auth = createOAuthDeviceAuth({
       clientType: "oauth-app",
@@ -39,11 +56,17 @@ export async function initiateDeviceFlow(): Promise<VerificationResponse> {
       },
     });
 
+    // Store the auth instance for reuse
+    pendingAuth = auth;
+
     // Start the device authorization flow (this triggers onVerification)
     auth({ type: "oauth" }).then((tokenAuth) => {
       // User completed verification, store the token
       if (tokenAuth.token) {
         githubToken = tokenAuth.token;
+        // Clear the pending auth instance since we're done
+        pendingAuth = null;
+        pendingVerification = null;
         // Refresh Copilot token
         refreshCopilotToken().catch((err) => {
           logger.error('Failed to get Copilot token after auth:', err);
@@ -53,6 +76,7 @@ export async function initiateDeviceFlow(): Promise<VerificationResponse> {
       // If verification hasn't been sent yet, reject
       if (!pendingVerification) {
         logger.error('Failed to initiate device flow:', error);
+        pendingAuth = null;
         reject(new Error('Failed to initiate GitHub authentication'));
       }
       // Otherwise, this is expected (user hasn't completed verification yet)
@@ -65,32 +89,27 @@ export async function initiateDeviceFlow(): Promise<VerificationResponse> {
  * @returns Promise<boolean> Whether authentication was successful
  */
 export async function checkDeviceFlowAuth(): Promise<boolean> {
-  // If already authenticated, return true
-  if (githubToken && copilotToken) {
+  // If already authenticated with valid token, return true immediately
+  if (githubToken && copilotToken && isTokenValid()) {
     return true;
   }
 
-  // If there's no pending verification, we can't check
-  if (!pendingVerification) {
+  // If there's no pending auth instance, we can't check
+  if (!pendingAuth) {
     return false;
   }
 
-  const auth = createOAuthDeviceAuth({
-    clientType: "oauth-app",
-    clientId: config.github.copilot.clientId,
-    scopes: ["read:user"],
-    onVerification() {
-      // No-op: we already have verification info
-    },
-  });
-
   try {
-    // This will throw if the user hasn't authorized yet
-    const tokenAuth = await auth({ type: "oauth" });
+    // Reuse the existing auth instance instead of creating a new one
+    const tokenAuth = await pendingAuth({ type: "oauth" });
     
     if (tokenAuth.token) {
       // Successfully authenticated
       githubToken = tokenAuth.token;
+      
+      // Clear pending auth since we're done
+      pendingAuth = null;
+      pendingVerification = null;
       
       // Get Copilot token using GitHub token
       await refreshCopilotToken();
@@ -100,15 +119,24 @@ export async function checkDeviceFlowAuth(): Promise<boolean> {
     
     return false;
   } catch (error: unknown) {
-    // If it's a pending authorization, that's expected
     const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // If it's a pending authorization, that's expected
     if (errorMessage.includes('authorization_pending')) {
       return false;
     }
     
-    // Log other errors
+    // If the device code expired, clear the pending auth
+    if (errorMessage.includes('expired') || errorMessage.includes('code_expired')) {
+      logger.warn('Device code expired, clearing pending auth');
+      pendingAuth = null;
+      pendingVerification = null;
+      return false;
+    }
+    
+    // Log other errors but don't throw - allow graceful degradation
     logger.error('Error checking device flow auth:', error);
-    throw error;
+    return false;
   }
 }
 
@@ -175,5 +203,7 @@ export function isTokenValid(): boolean {
 export function clearTokens(): void {
   githubToken = null;
   copilotToken = null;
+  pendingAuth = null;
+  pendingVerification = null;
   logger.info('Authentication tokens cleared');
 }

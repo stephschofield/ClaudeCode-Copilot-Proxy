@@ -18,7 +18,7 @@ export interface VerificationResponse {
   user_code: string;
   expires_in: number;
   interval: number;
-  status: 'pending_verification';
+  status: 'pending_verification' | 'authenticated';
 }
 
 export interface AuthenticationStatus {
