@@ -1,12 +1,16 @@
 import { app } from './server.js';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
+import { loadPersistedTokens } from './services/auth-service.js';
 
 const startServer = () => {
   const port = config.server.port;
   const host = config.server.host;
 
   try {
+    // Load persisted tokens on startup
+    loadPersistedTokens();
+    
     app.listen(port, () => {
       logger.info(`Server running at http://${host}:${port}/`);
       logger.info('Press CTRL-C to stop the server');

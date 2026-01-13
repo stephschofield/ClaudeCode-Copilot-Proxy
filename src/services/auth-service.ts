@@ -1,17 +1,110 @@
 import { createOAuthDeviceAuth } from '@octokit/auth-oauth-device';
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { config } from '../config/index.js';
 import { CopilotToken, VerificationResponse } from '../types/github.js';
 import { logger } from '../utils/logger.js';
 
+// Token storage path (persistent across restarts)
+const TOKEN_STORAGE_DIR = path.join(os.homedir(), '.github-copilot-proxy');
+const GITHUB_TOKEN_FILE = path.join(TOKEN_STORAGE_DIR, 'github-token.json');
+const COPILOT_TOKEN_FILE = path.join(TOKEN_STORAGE_DIR, 'copilot-token.json');
+
 // In-memory token storage
-// Note: In a production environment with multiple instances,
-// you might want to use Redis or another shared cache
 let githubToken: string | null = null;
 let copilotToken: CopilotToken | null = null;
 let pendingVerification: VerificationResponse | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pendingAuth: any = null;
+let tokenRefreshInterval: NodeJS.Timeout | null = null;
+
+// Ensure token storage directory exists
+if (!fs.existsSync(TOKEN_STORAGE_DIR)) {
+  fs.mkdirSync(TOKEN_STORAGE_DIR, { recursive: true });
+}
+
+/**
+ * Load tokens from persistent storage on startup
+ */
+export function loadPersistedTokens(): void {
+  try {
+    // Load GitHub token
+    if (fs.existsSync(GITHUB_TOKEN_FILE)) {
+      const data = fs.readFileSync(GITHUB_TOKEN_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      if (parsed.token) {
+        githubToken = parsed.token;
+        logger.info('Loaded GitHub token from persistent storage');
+      }
+    }
+    
+    // Load Copilot token
+    if (fs.existsSync(COPILOT_TOKEN_FILE)) {
+      const data = fs.readFileSync(COPILOT_TOKEN_FILE, 'utf-8');
+      copilotToken = JSON.parse(data) as CopilotToken;
+      logger.info('Loaded Copilot token from persistent storage', {
+        expires_at: new Date(copilotToken.expires_at * 1000).toISOString()
+      });
+    }
+    
+    // Start auto-refresh if we have tokens
+    if (githubToken) {
+      startTokenAutoRefresh();
+    }
+  } catch (error) {
+    logger.error('Error loading persisted tokens:', error);
+  }
+}
+
+/**
+ * Save GitHub token to persistent storage
+ */
+function saveGithubToken(token: string): void {
+  try {
+    fs.writeFileSync(GITHUB_TOKEN_FILE, JSON.stringify({ token }), 'utf-8');
+    logger.debug('GitHub token saved to persistent storage');
+  } catch (error) {
+    logger.error('Error saving GitHub token:', error);
+  }
+}
+
+/**
+ * Save Copilot token to persistent storage
+ */
+function saveCopilotToken(token: CopilotToken): void {
+  try {
+    fs.writeFileSync(COPILOT_TOKEN_FILE, JSON.stringify(token), 'utf-8');
+    logger.debug('Copilot token saved to persistent storage');
+  } catch (error) {
+    logger.error('Error saving Copilot token:', error);
+  }
+}
+
+/**
+ * Start automatic token refresh
+ */
+function startTokenAutoRefresh(): void {
+  // Clear any existing interval
+  if (tokenRefreshInterval) {
+    clearInterval(tokenRefreshInterval);
+  }
+  
+  // Check and refresh token every 5 minutes
+  tokenRefreshInterval = setInterval(async () => {
+    if (githubToken && (!copilotToken || !isTokenValid())) {
+      try {
+        logger.info('Auto-refreshing Copilot token...');
+        await refreshCopilotToken();
+      } catch (error) {
+        logger.error('Auto-refresh failed:', error);
+      }
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+  
+  logger.info('Token auto-refresh started');
+}
 
 /**
  * Initialize the OAuth device flow for GitHub authentication
@@ -64,9 +157,12 @@ export async function initiateDeviceFlow(): Promise<VerificationResponse> {
       // User completed verification, store the token
       if (tokenAuth.token) {
         githubToken = tokenAuth.token;
+        saveGithubToken(tokenAuth.token);
         // Clear the pending auth instance since we're done
         pendingAuth = null;
         pendingVerification = null;
+        // Start auto-refresh
+        startTokenAutoRefresh();
         // Refresh Copilot token
         refreshCopilotToken().catch((err) => {
           logger.error('Failed to get Copilot token after auth:', err);
@@ -106,10 +202,14 @@ export async function checkDeviceFlowAuth(): Promise<boolean> {
     if (tokenAuth.token) {
       // Successfully authenticated
       githubToken = tokenAuth.token;
+      saveGithubToken(tokenAuth.token);
       
       // Clear pending auth since we're done
       pendingAuth = null;
       pendingVerification = null;
+      
+      // Start auto-refresh
+      startTokenAutoRefresh();
       
       // Get Copilot token using GitHub token
       await refreshCopilotToken();
@@ -164,6 +264,7 @@ export async function refreshCopilotToken(): Promise<CopilotToken> {
     }
 
     copilotToken = await response.json() as CopilotToken;
+    saveCopilotToken(copilotToken);
     logger.info('Copilot token refreshed', { 
       expires_at: new Date(copilotToken.expires_at * 1000).toISOString() 
     });
@@ -193,8 +294,8 @@ export function isTokenValid(): boolean {
   }
   
   const now = Math.floor(Date.now() / 1000);
-  // Add a small buffer to ensure we don't use tokens that are about to expire
-  return now < (copilotToken.expires_at - 60);
+  // Reduced buffer from 60s to 5s to extend token usage time
+  return now < (copilotToken.expires_at - 5);
 }
 
 /**
@@ -205,5 +306,24 @@ export function clearTokens(): void {
   copilotToken = null;
   pendingAuth = null;
   pendingVerification = null;
+  
+  // Clear auto-refresh
+  if (tokenRefreshInterval) {
+    clearInterval(tokenRefreshInterval);
+    tokenRefreshInterval = null;
+  }
+  
+  // Delete persisted tokens
+  try {
+    if (fs.existsSync(GITHUB_TOKEN_FILE)) {
+      fs.unlinkSync(GITHUB_TOKEN_FILE);
+    }
+    if (fs.existsSync(COPILOT_TOKEN_FILE)) {
+      fs.unlinkSync(COPILOT_TOKEN_FILE);
+    }
+  } catch (error) {
+    logger.error('Error deleting persisted tokens:', error);
+  }
+  
   logger.info('Authentication tokens cleared');
 }
